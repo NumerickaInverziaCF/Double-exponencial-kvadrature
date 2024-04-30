@@ -1,0 +1,226 @@
+---
+title: "Porovnania_pdfCasy_gdd"
+author: "Branislav Lacovič"
+date: "2024-02-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(CharFunToolR)
+setwd("C:/Users/Lacovic/OneDrive - UPJŠ/LacovicBranislavBpDp/Softver/DE_kvadratura/skuska GDD")
+source('cf2DistGP.R')
+source('DEQuadrature.R')
+source('cf2DistFFT.R')
+options <- list(isPlot=FALSE)
+
+x<-seq(-3,4,length.out=201)
+
+```
+
+```{r warning=FALSE}
+set.seed(101)
+alpha1 <-sample(seq(1,50,length=50),100,replace=TRUE) 
+set.seed(102)
+beta1 <- sample(seq(1,50,length=50),100,replace=TRUE)
+set.seed(103)
+alpha2 <-sample(seq(1,50,length=50),100,replace=TRUE) 
+set.seed(104)
+beta2 <- sample(seq(1,50,length=50),100,replace=TRUE)
+
+pdfGP<-vector()
+pdfFFT<-vector()
+pdfDEcGP<-vector()
+pdfDEFFT<-vector()
+pdfDEreGP<-vector()
+
+for (i in 1:100) {
+  
+cf_gdd <- function(t) {
+  result <- ((1-1i*t/beta1[i])^(-alpha1[i]))*((1+1i*t/beta2[i])^(-alpha2[i]))
+  return(result)
+}
+
+integrand1_pdf_gdd <- function(t, x) {
+  result <- 1/pi * Re(exp(-1i*t*x) * cf_gdd(t))
+  return(result)
+}
+
+r <- function(t) {
+  result <- ((beta1[i]^alpha1[i])*(beta2[i]^alpha2[i]))/(pi*((beta1[i]^2+t^2)^(alpha1[i]/2))*((beta2[i]^2+t^2)^(alpha2[i]/2)))
+  return(result)
+}
+
+phi <- function(t) {
+  result <- alpha1[i]*atan(t/beta1[i])-alpha2[i]*atan(t/beta2[i])
+  return(result)
+}
+
+integrand2_pdf_gdd <- function(t, x) {
+  result <- r(t)*cos(x*t-phi(t))
+  return(result)
+}
+
+
+fdec <- function(x, eps) {
+  result <- intdeo(function(t){integrand1_pdf_gdd(t,x)}, 0, x, eps)$i
+  return(result)
+}
+fdecv <-function(x, eps){
+  result <-lapply(X=x, fdec, eps)
+  return(as.numeric(unlist(result)))
+}
+
+fde <- function(x, eps) {
+  result <- intdeo(function(t){integrand2_pdf_gdd(t,x)}, 0, x, eps)$i
+  return(result)
+}
+
+fdev <- function(x, eps) {
+  result <-lapply(X=x, fde, eps)
+  return(as.numeric(unlist(result)))
+}  
+
+###PDF GP
+fwrv <- function(x) {
+  result <- cf2DistGP(cf = cf_gdd, x = x, options=options)$pdf
+  return(result)
+}
+
+
+
+FFTintegrand1_pdf_gdd <- function(t, x) {
+    result <- (1/(2*pi)) * exp(-1i*t*x) * cf_gdd(t)
+    return(result)
+}
+
+fdec2 <- function(x, eps) {
+    result <- 2*intdeo(function(t){FFTintegrand1_pdf_gdd(t,x)}, 0, x, eps)$i
+    return(result)
+}
+fdecv2 <-function(x, eps){
+    result <-lapply(X=x, fdec2, eps)
+    return(as.numeric(unlist(result)))
+}
+
+  # vectorization
+fwrv2 <- function(x) {
+  result <- cf2DistFFT(cf = cf_gdd, x = x, options=options)$pdf
+  return(result)
+}
+
+
+
+fwrvtime2 <- function(x, rep = 10){
+    tic <- Sys.time()
+    for (k in 1:rep){
+        fwrv2(x)
+    }
+    toc <- Sys.time()
+    return(toc-tic)
+}
+
+fdecvtime2 <- function(x, rep = 10,eps=1e-15){
+    tic <- Sys.time()
+    for (k in 1:rep){
+        fdecv2(x,eps=eps )
+    }
+    toc <- Sys.time()
+    return(toc-tic)
+}
+
+
+fwrvtime <- function(x, rep = 10){
+    tic <- Sys.time()
+    for (k in 1:rep){
+        fwrv(x)
+    }
+    toc <- Sys.time()
+    return(toc-tic)
+}
+
+fdecvtime <- function(x, rep = 10,eps=1e-15){
+    tic<- Sys.time()
+    for (k in 1:rep){
+        fdecv(x,eps=eps)
+    }
+    toc <- Sys.time()
+    return(toc-tic)
+}
+fdevtime <- function(x, rep = 10,eps=1e-15){
+    tic<- Sys.time()
+    for (k in 1:rep){
+        fdev(x,eps=eps)
+    }
+    toc <- Sys.time()
+    return(toc-tic)
+}
+
+fwrvtimeit <- function(fun, r = 3, rep = 5){
+     times <- c()
+     for (k in 1:r){
+             times <- c(times, fwrvtime(x, rep=rep)/rep) 
+         } 
+     
+     return(list(mean(times),sd(times),times))
+}
+
+fwrv2timeit <- function(fun, r = 3, rep = 5){
+     times <- c()
+     for (k in 1:r){
+             times <- c(times, fwrvtime2(x, rep=rep)/rep) 
+         } 
+     
+     return(list(mean(times),sd(times),times))
+}
+
+fdecvtimeit <- function(fun, r = 3, rep = 5){
+     times <- c()
+     for (k in 1:r){
+             times <- c(times, fdecvtime(x, rep=rep)/rep) 
+         } 
+     
+     return(list(mean(times),sd(times),times))
+}
+
+fdevtimeit <- function(fun, r = 3, rep = 5){
+     times <- c()
+     for (k in 1:r){
+             times <- c(times, fdevtime(x, rep=rep)/rep) 
+         } 
+     
+     return(list(mean(times),sd(times),times))
+}
+
+fdecv2timeit <- function(fun, r = 3, rep = 5){
+     times <- c()
+     for (k in 1:r){
+             times <- c(times, fdecvtime2(x, rep=rep)/rep) 
+         } 
+     
+     return(list(mean(times),sd(times),times))
+}
+
+
+pdfGP[i]<-fwrvtimeit(rep=1,r=10)[[1]]
+pdfFFT[i]<-fwrv2timeit(rep=1,r=10)[[1]]
+pdfDEcGP[i]<-fdecvtimeit(rep=1,r=10)[[1]]
+pdfDEFFT[i]<-fdecv2timeit(rep=1,r=10)[[1]]
+pdfDEreGP[i]<-fdevtimeit(rep=1,r=10)[[1]]
+}
+
+```
+
+```{r warning=FALSE}
+
+hist(pdfGP)
+hist(pdfFFT)
+hist(pdfDEcGP)
+hist(pdfDEFFT)
+hist(pdfDEreGP)
+
+
+```

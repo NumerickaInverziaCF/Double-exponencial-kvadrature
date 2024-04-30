@@ -1,0 +1,229 @@
+---
+title: "Porovnania_cdf_gdd2"
+author: "Branislav Lacovič"
+date: "2024-04-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(distributions3)
+library(CharFunToolR)
+setwd("C:/Users/Lacovic/OneDrive - UPJŠ/LacovicBranislavBpDp/Softver/DE_kvadratura/skuska GDD")
+source('cf2DistGP.R')
+source('DEQuadrature.R')
+source('cf2DistFFT.R')
+options <- list(isPlot=FALSE)
+```
+
+```{r}
+empiricalCDF<-function(alpha1,alpha2,beta1,beta2){
+  
+  gamma1<-rgamma(50000,alpha1,beta1)
+  gamma2<-rgamma(50000,alpha2,beta2)
+    GDD<-gamma1-gamma2
+  
+    Length <- length(GDD) 
+    sorted <- sort(GDD) 
+      
+    ecdf <- rep(0, Length) 
+    for (i in Length:1) { 
+        ecdf[i] <- sum(GDD < sorted[i]) / Length 
+    } 
+  
+return(list(ecdf=ecdf,GDD=GDD))
+    }
+
+```
+
+
+```{r}
+# parameters
+simulations<-function(N,eps,down,up){
+set.seed(101)
+alpha1 <-sample(seq(down,up,length=100),N,replace=TRUE) 
+set.seed(102)
+beta1 <- sample(seq(down,up,length=100),N,replace=TRUE)
+
+set.seed(103)
+alpha2 <-sample(seq(down,up,length=100),N,replace=TRUE) 
+set.seed(104)
+beta2 <- sample(seq(down,up,length=100),N,replace=TRUE)
+
+#CDF
+
+#GP - vec
+minimum_Fwrv<-vector()
+maximum_Fwrv<-vector()
+
+
+#FFT - vec
+FFTminimum_Fwrv<-vector()
+FFTmaximum_Fwrv<-vector()
+
+
+#De - complex
+minimum_Fdecv<-vector()
+maximum_Fdecv<-vector()
+
+#De - real
+minimum_Fdev<-vector()
+maximum_Fdev<-vector()
+
+
+for (i in 1:N) {
+# true values of pdf 
+empirical<-empiricalCDF(alpha1,alpha2,beta1,beta2) 
+cdfVal<-empirical$ecdf
+x<-sort(empirical$GDD)
+cf_gdd <- function(t) {
+  result <- ((1-1i*t/beta1[i])^(-alpha1[i]))*((1+1i*t/beta2[i])^(-alpha2[i]))
+  return(result)
+}
+  options <- list(isPlot=FALSE)
+
+r <- function(t) {
+  result <- ((beta1[i]^alpha1[i])*(beta2[i]^alpha2[i]))/(pi*((beta1[i]^2+t^2)^(alpha1[i]/2))*((beta2[i]^2+t^2)^(alpha2[i]/2)))
+  return(result)
+}
+
+phi <- function(t) {
+  result <- alpha1[i]*atan(t/beta1[i])-alpha2[i]*atan(t/beta2[i])
+  return(result)
+}
+
+###CDF GP
+# vectorization
+Fwrv <- function(x) {
+    result <- cf2DistGP(cf = cf_gdd, x = x, options=options)$cdf
+    return(result)
+}
+
+
+###cdf De quadraure
+
+#### DE integrand
+integrand1_cdf_gdd <- function(t, x) {
+    result <-  1/pi * Im(exp(-1i*t*x) * (cf_gdd(t)/t))
+
+    return(result)
+}
+
+
+integrand2_cdf_gdd <- function(t, x) {
+    result <- ( (r(t)/t)*sin(x*t-phi(t)))
+    return(result)
+}
+
+Fdec <- function(x, eps) {
+    result <- 1/2 -intdeo(function(t){integrand1_cdf_gdd(t,x)}, 0, x, eps)$i
+    return(result)
+}
+Fdecv <-function(x, eps){
+    result <-lapply(X=x, Fdec, eps)
+    return(as.numeric(unlist(result)))
+}
+
+Fde <- function(x, eps) {
+    result <- 1/2+intdeo(function(t){integrand2_cdf_gdd(t,x)}, 0, x, eps)$i
+    return(result)
+}
+
+Fdev <- function(x, eps) {
+    result <-lapply(X=x, Fde, eps)
+    return(as.numeric(unlist(result)))
+}
+
+
+
+### Fourier transformation cdf
+
+  # vectorization
+Fwrv2 <- function(x) {
+  result <- cf2DistFFT(cf = cf_gdd , x = x, options=options)$cdf
+  return(result)
+}
+
+
+#CDF
+#GP - vec
+Int<-Fwrv(x)
+minimum_Fwrv[i] <- min(abs(cdfVal-Int))
+maximum_Fwrv[i] <- max(abs(cdfVal-Int))
+
+#FFT - vec
+Int<-Fwrv2(x)
+FFTminimum_Fwrv[i] <- min(abs(cdfVal-Int))
+FFTmaximum_Fwrv[i] <- max(abs(cdfVal-Int))
+
+#De - complex
+Int<-Fdecv(x,eps)
+minimum_Fdecv[i] <- min(abs(cdfVal-Int))
+maximum_Fdecv[i] <- max(abs(cdfVal-Int))
+
+#De - real
+Int<-Fdev(x,eps)
+minimum_Fdev[i] <- min(abs(cdfVal-Int))
+maximum_Fdev[i] <- max(abs(cdfVal-Int))
+}
+
+
+result1<-list("min - cdf vector gp"=mean(minimum_Fwrv),
+             "max - cdf vector gp"=mean(maximum_Fwrv),
+             #"min - cdf novector gp"=mean(minimum_Fwr),
+             #"max - cdf novector gp"=mean(maximum_Fwr),
+             "min - cdf vector fft"=mean(FFTminimum_Fwrv),
+             "max - cdf vector fft"=mean(FFTmaximum_Fwrv),
+             #"min - cdf novector fft"=mean(FFTminimum_Fwr),
+             #"max - cdf novector fft"=mean(maximum_Fwr),
+             "min - cdf complex de - gp"=mean(minimum_Fdecv),
+             "max - cdf complex de - gp"=mean(maximum_Fdecv),
+             "min - cdf nocomplex de - gp"=mean(minimum_Fdev),
+             "max - cdf nocomplex de - gp"=mean(maximum_Fdev))
+
+result2<-list("min - cdf vector gp"=minimum_Fwrv,
+             "max - cdf vector gp"=maximum_Fwrv,
+             #"min - cdf novector gp"=minimum_Fwr,
+             #"max - cdf novector gp"=maximum_Fwr,
+             "min - cdf vector fft"=FFTminimum_Fwrv,
+             "max - cdf vector fft"=FFTmaximum_Fwrv,
+             #"min - cdf novector fft"=FFTminimum_Fwr,
+             #"max - cdf novector fft"=maximum_Fwr,
+             "min - cdf complex de - gp"=minimum_Fdecv,
+             "max - cdf complex de - gp"=maximum_Fdecv,
+             "min - cdf nocomplex de - gp"=minimum_Fdev,
+             "max - cdf nocomplex de - gp"=maximum_Fdev)
+
+result<-list(result1,result2)
+return(result)
+}
+```
+
+
+
+
+
+```{r warning=FALSE}
+result <- simulations(100,1e-15,10,50)
+```
+
+```{r}
+#histogramy
+min<-hist(result[[2]]$`min - cdf vector gp`,breaks=20)
+max<-hist(result[[2]]$`max - cdf vector gp`,breaks=20)
+
+
+min<-hist(result[[2]]$`min - cdf vector fft`,breaks=20)
+max<-hist(result[[2]]$`max - cdf vector fft`,breaks=20)
+
+
+min<-hist(result[[2]]$`min - cdf complex de - gp`,breaks=20)
+max<-hist(result[[2]]$`max - cdf complex de - gp`,breaks=20)
+
+min<-hist(result[[2]]$`min - cdf nocomplex de - gp`,breaks=20)
+max<-hist(result[[2]]$`max - cdf nocomplex de - gp`,breaks=20)
+```
+

@@ -1,0 +1,251 @@
+---
+title: "Porovnania_pdf_gdd3"
+author: "Branislav Lacovič"
+date: "2024-02-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(CharFunToolR)
+setwd("C:/Users/Lacovic/OneDrive - UPJŠ/LacovicBranislavBpDp/Softver/DE_kvadratura/skuska GDD")
+source('cf2DistGP.R')
+source('DEQuadrature.R')
+source('cf2DistFFT.R')
+options <- list(isPlot=FALSE)
+```
+
+```{r}
+empiricalPDF<-function(alpha1,alpha2,beta1,beta2){
+  
+  gamma1<-rgamma(50000,alpha1,beta1)
+  gamma2<-rgamma(50000,alpha2,beta2)
+    GDD<-gamma1-gamma2
+x<-density(GDD)$x
+y<-density(GDD)$y
+return(list(x=x,y=y))
+    }
+```
+
+```{r}
+# parameters
+simulations<-function(N,eps,down,up){
+set.seed(101)
+alpha1 <-sort(sample(seq(down,up,length=100),N,replace=TRUE)) 
+set.seed(102)
+beta1 <- sort(sample(seq(down,up,length=100),N,replace=TRUE))
+
+set.seed(103)
+alpha2 <-sort(sample(seq(down,up,length=100),N,replace=TRUE)) 
+set.seed(104)
+beta2 <- sort(sample(seq(down,up,length=100),N,replace=TRUE))
+
+
+#PDF
+#GP - vec
+minimum_fwrv<-vector()
+maximum_fwrv<-vector()
+
+
+#FFT - vec
+FFTminimum_fwrv<-vector()
+FFTmaximum_fwrv<-vector()
+
+
+#De - complex
+minimum_fdecv<-vector()
+maximum_fdecv<-vector()
+
+#De - real
+minimum_fdev<-vector()
+maximum_fdev<-vector()
+
+#FFT De
+FFTminimum_fdecv<-vector()
+FFTmaximum_fdecv<-vector()
+
+for (i in 1:N) {
+
+  empirical<- empiricalPDF(alpha1[i],alpha2[i],beta1[i],beta2[i])
+
+  pdfVal<-empirical$y
+  x<-empirical$x
+
+cf_gdd <- function(t) {
+  result <- ((1-1i*t/beta1[i])^(-alpha1[i]))*((1+1i*t/beta2[i])^(-alpha2[i]))
+  return(result)
+}
+  options <- list(isPlot=FALSE)
+
+
+integrand1_pdf_gdd <- function(t, x) {
+  result <- 1/pi * Re(exp(-1i*t*x) * cf_gdd(t))
+  return(result)
+}
+
+r <- function(t) {
+  result <- ((beta1[i]^alpha1[i])*(beta2[i]^alpha2[i]))/(pi*((beta1[i]^2+t^2)^(alpha1[i]/2))*((beta2[i]^2+t^2)^(alpha2[i]/2)))
+  return(result)
+}
+
+phi <- function(t) {
+  result <- alpha1[i]*atan(t/beta1[i])-alpha2[i]*atan(t/beta2[i])
+  return(result)
+}
+
+integrand2_pdf_gdd <- function(t, x) {
+  result <- r(t)*cos(x*t-phi(t))
+  return(result)
+}
+
+
+fdec <- function(x, eps) {
+  result <- intdeo(function(t){integrand1_pdf_gdd(t,x)}, 0, x, eps)$i
+  return(result)
+}
+fdecv <-function(x, eps){
+  result <-lapply(X=x, fdec, eps)
+  return(as.numeric(unlist(result)))
+}
+
+fde <- function(x, eps) {
+  result <- intdeo(function(t){integrand2_pdf_gdd(t,x)}, 0, x, eps)$i
+  return(result)
+}
+
+fdev <- function(x, eps) {
+  result <-lapply(X=x, fde, eps)
+  return(as.numeric(unlist(result)))
+}  
+
+###PDF GP
+fwrv <- function(x) {
+  result <- cf2DistGP(cf = cf_gdd, x = x, options=options)$pdf
+  return(result)
+}
+
+
+
+FFTintegrand1_pdf_gdd <- function(t, x) {
+    result <- (1/(2*pi)) * exp(-1i*t*x) * cf_gdd(t)
+    return(result)
+}
+
+fdec2 <- function(x, eps) {
+    result <- 2*intdeo(function(t){FFTintegrand1_pdf_gdd(t,x)}, 0, x, eps)$i
+    return(result)
+}
+fdecv2 <-function(x, eps){
+    result <-lapply(X=x, fdec2, eps)
+    return(as.numeric(unlist(result)))
+}
+
+  # vectorization
+fwrv2 <- function(x) {
+  result <- cf2DistFFT(cf = cf_gdd, x = x, options=options)$pdf
+  return(result)
+}
+
+
+# absolute precision - min, max  
+#GP - vec
+Int<-fwrv(x)
+minimum_fwrv[i] <- min(abs(pdfVal-Int))
+maximum_fwrv[i] <- max(abs(pdfVal-Int))
+
+
+#FFT - vec
+Int<-fwrv2(x)
+FFTminimum_fwrv[i] <- min(abs(pdfVal-Int))
+FFTmaximum_fwrv[i] <- max(abs(pdfVal-Int))
+
+
+#De - complex
+Int<-fdecv(x,eps)
+minimum_fdecv[i] <- min(abs(pdfVal-Int))
+maximum_fdecv[i] <- max(abs(pdfVal-Int))
+
+#De - real
+Int<-fdev(x,eps)
+minimum_fdev[i] <- min(abs(pdfVal-Int))
+maximum_fdev[i] <- max(abs(pdfVal-Int))
+
+#FFT De
+Int<-fdecv2(x,eps)
+FFTminimum_fdecv[i] <- min(abs(pdfVal-Int))
+FFTmaximum_fdecv[i] <- max(abs(pdfVal-Int))
+}
+
+result1<-list("min - pdf vector gp"=mean(minimum_fwrv),
+             "max - pdf vector gp"=mean(maximum_fwrv),
+             #"min - pdf novector gp" =mean(minimum_fwr),
+             #"max - pdf novector gp"=mean(maximum_fwr),
+             "min - pdf vector fft"=mean(FFTminimum_fwrv),
+             "max - pdf vector fft"=mean(FFTmaximum_fwrv),
+             #"min - pdf novector fft"=mean(FFTminimum_fwr),
+             #"max - pdf novector fft"=mean(FFTmaximum_fwr),
+             "min - pdf complex de - gp"=mean(minimum_fdecv),
+             "max - pdf complex de - gp"=mean(maximum_fdecv),
+             "min - pdf real de - gp"=mean(minimum_fdev),
+             "max - pdf vector real de - gp"=mean(maximum_fdev),
+             "min - pdf  de - fft"=mean(FFTminimum_fdecv),
+             "max - pdf vector de - fft"=mean(FFTmaximum_fdecv))
+            
+result2<-list("min - pdf vector gp"=minimum_fwrv,
+             "max - pdf vector gp"=maximum_fwrv,
+             #"min - pdf novector gp" =minimum_fwr,
+             #"max - pdf novector gp"=maximum_fwr,
+             "min - pdf vector fft"=FFTminimum_fwrv,
+             "max - pdf vector fft"=FFTmaximum_fwrv,
+             #"min - pdf novector fft"=FFTminimum_fwr,
+             #"max - pdf novector fft"=FFTmaximum_fwr,
+             "min - pdf complex de - gp"=minimum_fdecv,
+             "max - pdf complex de - gp"=maximum_fdecv,
+             "min - pdf real de - gp"=minimum_fdev,
+             "max - pdf vector real de - gp"=maximum_fdev,
+             "min - pdf  de - fft"=FFTminimum_fdecv,
+             "max - pdf vector de - fft"=FFTmaximum_fdecv)
+             
+result<-list(result1,result2)
+return(result)
+}
+
+
+```
+
+
+```{r warning=FALSE}
+result <- simulations(100,1e-15,1,50)
+```
+
+```{r}
+#histogramy
+min<-hist(result[[2]]$`min - pdf vector gp`,breaks = 20)
+max<-hist(result[[2]]$`max - pdf vector gp`,breaks = 20)
+
+#min<-hist(result[[2]]$`min - pdf novector gp`,breaks-20)
+#max<-hist(result[[2]]$`max - pdf novector gp`,breaks=20)
+#plot(min)
+#plot(max,add=TRUE,col="red",main="Method: cf2DistGP no-vectorize")
+
+min<-hist(result[[2]]$`min - pdf vector fft`,breaks=20)
+max<-hist(result[[2]]$`max - pdf vector fft`,breaks=20)
+
+#min<-hist(result[[2]]$`min - pdf novector fft`,breaks=20)
+#max<-hist(result[[2]]$`max - pdf novector fft`,breaks=20)
+#plot(min)
+#plot(max,add=TRUE,col="red",main="Method: cf2DistFFT no-vectorize")
+
+min<-hist(result[[2]]$`min - pdf complex de - gp`,breaks=20)
+max<-hist(result[[2]]$`max - pdf complex de - gp`,breaks=20)
+
+min<-hist(result[[2]]$`min - pdf real de - gp`,breaks=20)
+max<-hist(result[[2]]$`max - pdf vector real de - gp`,breaks=20)
+
+min<-hist(result[[2]]$`min - pdf  de - fft`,breaks=20)
+max<-hist(result[[2]]$`max - pdf vector de - fft`,breaks=20)
+
+```
