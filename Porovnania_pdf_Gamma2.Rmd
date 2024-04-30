@@ -1,0 +1,305 @@
+---
+title: "Comparisons methods for numerical inversion CF - Gamma distribution 2"
+author: "Branislav Lacovič"
+date: "2024-04-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Porovnávania algoritmus cf2DistGP s algoritmom cf2DistFFT a s algoritmami, ktoré okrem lichobežníkovej kvadratúry pri výpočte integrálov využívajú aj Dvojitú exponenciálnu kvadratúru.
+
+Metódy sme spúšťali pre tri škály parametrov $[0.1, 10]$, $[10, 100]$, a $[0.1, 100]$. Dvojica parametrov bola z týchto rozhraní vybraná náhodne. Pre každé rozhranie bolo vykonaných sto simulácii. Pozorovali sme minimálne a maximálne absolútne odchýlky každej metódy od skutočných hodnôt a tiež aj časy behu algoritmu. Algoritmy sme porovnávali pri výpočte hustoty i distribučnej funkcie.
+
+Na obrázkoch môžeme vidieť histogramy odchýlok spomenutých metód pre prvé rozhranie $\alpha$ , $\beta$ z intervalu $[10, 100]$.
+
+```{r}
+library(CharFunToolR)
+setwd("C:/Users/Lacovic/OneDrive - UPJŠ/LacovicBranislavBpDp/Softver/DE_kvadratura/skuska GDD")
+source('cf2DistGP.R')
+source('DEQuadrature.R')
+source('cf2DistFFT.R')
+options <- list(isPlot=FALSE)
+options$xMin <- 0.1
+options$N <- 2 ^ 14
+options$xMax <- 4
+
+```
+
+
+```{r}
+# parameters
+simulations<-function(N,x,eps,down,up){
+set.seed(101)
+alpha <-sample(seq(down,up,length=100),N,replace=TRUE) 
+set.seed(102)
+beta <- sample(seq(down,up,length=100),N,replace=TRUE)
+
+#PDF
+#GP - vec
+minimum_fwrv<-vector()
+maximum_fwrv<-vector()
+
+#GP - NOvec
+#minimum_fwr<-vector()
+#maximum_fwr<-vector()
+
+#FFT - vec
+FFTminimum_fwrv<-vector()
+FFTmaximum_fwrv<-vector()
+
+#FFT - NOvec
+#FFTminimum_fwr<-vector()
+#FFTmaximum_fwr<-vector()
+
+#De - complex
+minimum_fdecv<-vector()
+maximum_fdecv<-vector()
+
+#De - real
+minimum_fdev<-vector()
+maximum_fdev<-vector()
+
+#FFT De
+FFTminimum_fdecv<-vector()
+FFTmaximum_fdecv<-vector()
+
+
+
+for (i in 1:N) {
+  
+# true values of pdf 
+pdfVal<- dgamma(x,alpha[i],beta[i])
+
+# char fun for Gamma distribution
+#cf_gamma <- function(t){
+ #       result <- (1-(1i*t/beta[i]))^(-alpha[i])
+  #      return(result)
+#}
+cf_gamma <- function(t){
+        result <- cfX_Gamma(t, alpha[i], beta[i])
+        return(result)
+        }
+integrand1_pdf_gamma <- function(t, x) {
+    result <- 1/pi * Re(exp(-1i*t*x) * cf_gamma(t))
+    return(result)
+}
+
+r <- function(t) {
+    result <- (beta[i]^alpha[i])/(pi*((beta[i]^2+t^2)^(alpha[i]/2)))
+    return(result)
+}
+
+phi <- function(t) {
+    result <- alpha[i]*atan(t/beta[i])
+    return(result)
+}
+
+integrand2_pdf_gamma <- function(t, x) {
+    result <- r(t)*cos(x*t-phi(t))
+    return(result)
+}
+
+
+###PDF GP
+# vectorization
+fwrv <- function(x) {
+    result <- cf2DistGP(cf = cf_gamma, x = x, options=options)$pdf
+    return(result)
+}
+
+#fr <-function(x){
+ #   result <- cf2DistGP(cf = cf_gamma, x = x, options=options)$pdf
+#    return(result)
+#}
+
+# onepoint calculation
+#fwr <- function(x){
+#    result <- lapply(X = x, FUN = fr)
+  #  return(as.numeric(unlist(result)))
+   
+#}
+
+
+
+###PDF De quadrature
+
+fdec <- function(x, eps) {
+    result <- intdeo(function(t){integrand1_pdf_gamma(t,x)}, 0, x, eps)$i
+    return(result)
+}
+fdecv <-function(x, eps){
+    result <-lapply(X=x, fdec, eps)
+    return(as.numeric(unlist(result)))
+}
+
+fde <- function(x, eps) {
+    result <- intdeo(function(t){integrand2_pdf_gamma(t,x)}, 0, x, eps)$i
+    return(result)
+}
+
+fdev <- function(x, eps) {
+    result <-lapply(X=x, fde, eps)
+    return(as.numeric(unlist(result)))
+}
+
+
+
+
+### Fourier transformation pdf
+
+  # vectorization
+fwrv2 <- function(x) {
+  result <- cf2DistFFT(cf = cf_gamma , x = x, options=options)$pdf
+  return(result)
+}
+
+#fr2 <-function(x){
+ # result <- cf2DistFFT(cf = cf_gamma, x = x, options=options)$pdf
+  #return(result)
+#}
+
+# onepoint calculation
+#fwr2 <- function(x){
+ # result <- lapply(X = x, FUN = fr2)
+  #return(as.numeric(unlist(result)))
+#}
+
+
+
+### DE integral for FFT
+
+FFTintegrand_pdf_gamma <- function(t, x) {
+    result <- (1/(2*pi)) * exp(-1i*t*x) * cf_gamma(t)
+    return(result)
+}
+
+fdec2 <- function(x, eps) {
+    result <- 2*intdeo(function(t){FFTintegrand_pdf_gamma(t,x)}, 0, x, eps)$i
+    return(result)
+}
+fdecv2 <-function(x, eps){
+    result <-lapply(X=x, fdec2, eps)
+    return(as.numeric(unlist(result)))
+}
+
+
+
+
+# absolute precision - min, max  
+#GP - vec
+Int<-fwrv(x)
+minimum_fwrv[i] <- min(abs(pdfVal-Int))
+maximum_fwrv[i] <- max(abs(pdfVal-Int))
+
+#GP - NOvec
+#minimum_fwr[i] <- min(abs(pdfVal-fwr(x)))
+#maximum_fwr[i] <- max(abs(pdfVal-fwr(x)))
+
+#FFT - vec
+Int<-fwrv2(x)
+FFTminimum_fwrv[i] <- min(abs(pdfVal-Int))
+FFTmaximum_fwrv[i] <- max(abs(pdfVal-Int))
+
+#FFT - NOvec
+#FFTminimum_fwr[i] <- min(abs(pdfVal-fwr2(x)))
+#FFTmaximum_fwr[i] <- max(abs(pdfVal-fwr2(x)))
+
+#De - complex
+Int<-fdecv(x,eps)
+minimum_fdecv[i] <- min(abs(pdfVal-Int))
+maximum_fdecv[i] <- max(abs(pdfVal-Int))
+
+#De - real
+Int<-fdev(x,eps)
+minimum_fdev[i] <- min(abs(pdfVal-Int))
+maximum_fdev[i] <- max(abs(pdfVal-Int))
+
+#FFT De
+Int<-fdecv2(x,eps)
+FFTminimum_fdecv[i] <- min(abs(pdfVal-Int))
+FFTmaximum_fdecv[i] <- max(abs(pdfVal-Int))
+
+}
+
+
+result1<-list("min - pdf vector gp"=mean(minimum_fwrv),
+             "max - pdf vector gp"=mean(maximum_fwrv),
+             #"min - pdf novector gp" =mean(minimum_fwr),
+             #"max - pdf novector gp"=mean(maximum_fwr),
+             "min - pdf vector fft"=mean(FFTminimum_fwrv),
+             "max - pdf vector fft"=mean(FFTmaximum_fwrv),
+             #"min - pdf novector fft"=mean(FFTminimum_fwr),
+             #"max - pdf novector fft"=mean(FFTmaximum_fwr),
+             "min - pdf complex de - gp"=mean(minimum_fdecv),
+             "max - pdf complex de - gp"=mean(maximum_fdecv),
+             "min - pdf real de - gp"=mean(minimum_fdev),
+             "max - pdf vector real de - gp"=mean(maximum_fdev),
+             "min - pdf  de - fft"=mean(FFTminimum_fdecv),
+             "max - pdf vector de - fft"=mean(FFTmaximum_fdecv))
+
+result2<-list("min - pdf vector gp"=minimum_fwrv,
+             "max - pdf vector gp"=maximum_fwrv,
+             #"min - pdf novector gp" =minimum_fwr,
+             #"max - pdf novector gp"=maximum_fwr,
+             "min - pdf vector fft"=FFTminimum_fwrv,
+             "max - pdf vector fft"=FFTmaximum_fwrv,
+             #"min - pdf novector fft"=FFTminimum_fwr,
+             #"max - pdf novector fft"=FFTmaximum_fwr,
+             "min - pdf complex de - gp"=minimum_fdecv,
+             "max - pdf complex de - gp"=maximum_fdecv,
+             "min - pdf real de - gp"=minimum_fdev,
+             "max - pdf vector real de - gp"=maximum_fdev,
+             "min - pdf  de - fft"=FFTminimum_fdecv,
+             "max - pdf vector de - fft"=FFTmaximum_fdecv)
+             
+
+result<-list(result1,result2)
+return(result)
+}
+
+
+```
+
+```{r}
+x <- seq(0.1, 4, length.out = 501)
+
+```
+
+
+
+```{r warning=FALSE}
+result <- simulations(100,x,1e-15,10,100)
+```
+
+
+```{r}
+#histogramy
+
+#Gil Paleaz
+min<-hist(result[[2]]$`min - pdf vector gp`,breaks = 20,main='Minimálne odchýlky pre GP',xlab = "Odchýlky" )
+max<-hist(result[[2]]$`max - pdf vector gp`,breaks = 20,main='Maximálne odchýlky pre GP',xlab = "Odchýlky")
+
+
+# Fourierova trnsformácia
+min<-hist(result[[2]]$`min - pdf vector fft`,breaks=20,main='Minimálne odchýlky pre FFT', xlab = "Odchýlky")
+max<-hist(result[[2]]$`max - pdf vector fft`,breaks=20,main='Maximálne odchýlky pre FFT',xlab = "Odchýlky")
+
+#Dvojitá expnenciálna kvadratúra pre Gil Paleazove vzorce - komplexná zložka
+min<-hist(result[[2]]$`min - pdf complex de - gp`,breaks=20,main='Minimálne odchýlky pre DE GP komplexná zložka',xlab = "Odchýlky")
+max<-hist(result[[2]]$`max - pdf complex de - gp`,breaks=20,main='Maximálne odchýlky pre DE GP komplexná zložka',xlab = "Odchýlky")
+
+#Dvojitá expnenciálna kvadratúra pre Gil Paleazove vzorce - reálna zložka
+min<-hist(result[[2]]$`min - pdf real de - gp`,breaks=20,main='Minimálne odchýlky pre DE GP reálna zložka',xlab = "Odchýlky")
+max<-hist(result[[2]]$`max - pdf vector real de - gp`,breaks=20,main='Maximálne odchýlky pre DE GP reálna zložka',xlab = "Odchýlky")
+
+#Dvojitá expnenciálna kvadratúra pre Fourierovu transformáciu
+min<-hist(result[[2]]$`min - pdf  de - fft`,breaks=20,main='Minimálne odchýlky pre DE FFT',xlab = "Odchýlky" )
+max<-hist(result[[2]]$`max - pdf vector de - fft`,breaks=20,main='Maximálne odchýlky pre DE FFT',xlab = "Odchýlky")
+
+```
+
+Z obrázkov je jasne vidieť, že najlepšie na tom je Dvojitá exponenciálna kvadratúra, či už z integrálu odvodeného pomocou Gil Paeleazových vzorcov alebo  Fourierovej transformácie, ktorá drží odchýlky okolo hodnoty $1.5 \cdot 10^{-12}$ čo je prakticky nulová hodnota.
+Po nej nasleduje algoritmus cf2DistFFT a cf2distGP, kde odchýlky sú porovnateľné.  

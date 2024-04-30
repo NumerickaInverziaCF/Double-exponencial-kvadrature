@@ -1,0 +1,304 @@
+---
+title: "Comparisons methods for numerical inversion CF - Gamma distribution 4"
+author: "Branislav Lacovič"
+date: "2024-02-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Porovnávania algoritmus cf2DistGP s algoritmom cf2DistFFT a s algoritmami, ktoré okrem lichobežníkovej kvadratúry pri výpočte integrálov využívajú aj Dvojitú exponenciálnu kvadratúru.
+
+Metódy sme spúšťali pre tri škály parametrov $[1, 10]$, $[10, 100]$, a $[1, 100]$. Dvojica parametrov bola z týchto rozhraní vybraná náhodne. Pre každé rozhranie bolo vykonaných sto simulácii. Pozorovali sme minimálne a maximálne absolútne odchýlky každej metódy od skutočných hodnôt a tiež aj časy behu algoritmu. Algoritmy sme porovnávali pri výpočte hustoty i distribučnej funkcie.
+
+Na obrázkoch môžeme vidieť histogramy odchýlok spomenutých metód pre výpočet CDF postupne pre všetky rozhrania.
+
+```{r}
+library(distributions3)
+library(CharFunToolR)
+setwd("C:/Users/Lacovic/OneDrive - UPJŠ/LacovicBranislavBpDp/Softver/DE_kvadratura/skuska GDD")
+source('cf2DistGP.R')
+source('DEQuadrature.R')
+source('cf2DistFFT.R')
+options <- list(isPlot=FALSE)
+    options$xMin <- 0.1
+    options$N <- 2 ^ 14
+    options$xMax <- 4
+    
+
+```
+
+```{r}
+# parameters
+simulations<-function(N,x,eps,down,up){
+set.seed(101)
+alpha <-sample(seq(down,up,length=100),N,replace=TRUE) 
+set.seed(102)
+beta <- sample(seq(down,up,length=100),N,replace=TRUE)
+
+#CDF
+
+#GP - vec
+minimum_Fwrv<-vector()
+maximum_Fwrv<-vector()
+
+#GP - NOvec
+#minimum_Fwr<-vector()
+#maximum_Fwr<-vector()
+
+#FFT - vec
+FFTminimum_Fwrv<-vector()
+FFTmaximum_Fwrv<-vector()
+
+#FFT - NOvec
+#FFTminimum_Fwr<-vector()
+#FFTmaximum_Fwr<-vector()
+
+#De - complex
+minimum_Fdecv<-vector()
+maximum_Fdecv<-vector()
+
+#De - real
+minimum_Fdev<-vector()
+maximum_Fdev<-vector()
+
+for (i in 1:N) {
+  
+# true values of pdf 
+cdfVal<-cdf(Gamma(alpha[i],beta[i]),x)
+
+cf_gamma <- function(t){
+        result <- cfX_Gamma(t, alpha[i], beta[i])
+        return(result)
+        }
+
+r <- function(t) {
+    result <- (beta[i]^alpha[i])/(pi*((beta[i]^2+t^2)^(alpha[i]/2)))
+    return(result)
+}
+
+phi <- function(t) {
+    result <- alpha[i]*atan(t/beta[i])
+    return(result)
+}
+
+integrand1_cdf_gamma <- function(t, x) {
+    result <- 1/pi * Im(exp(-1i*t*x) * (cf_gamma(t)/t))
+    return(result)
+}
+
+
+integrand2_cdf_gamma <- function(t, x) {
+    result <- ((r(t)/t)*sin(x*t-phi(t)))
+    return(result)
+}
+
+###CDF GP
+# vectorization
+Fwrv <- function(x) {
+    result <- cf2DistGP(cf = cf_gamma, x = x, options=options)$cdf
+    return(result)
+}
+
+#Fr <-function(x){
+ #   result <- cf2DistGP(cf = cf_gamma, x = x, options=options)$cdf
+  #  return(result)
+#}
+
+# onepoint calculation
+#Fwr <- function(x){
+ #   result <- lapply(X = x, FUN = Fr)
+  #  return(as.numeric(unlist(result)))
+   
+#}
+
+
+###cdf De quadraure
+
+Fdec <- function(x, eps) {
+    result <- 1/2 -intdeo(function(t){integrand1_cdf_gamma(t,x)}, 0, x, eps)$i
+    return(result)
+}
+Fdecv <-function(x, eps){
+    result <-lapply(X=x, Fdec, eps)
+    return(as.numeric(unlist(result)))
+}
+
+Fde <- function(x, eps) {
+    result <- 1/2+intdeo(function(t){integrand2_cdf_gamma(t,x)}, 0, x, eps)$i
+    return(result)
+}
+
+Fdev <- function(x, eps) {
+    result <-lapply(X=x, Fde, eps)
+    return(as.numeric(unlist(result)))
+}
+
+### Fourier transformation cdf
+
+  # vectorization
+Fwrv2 <- function(x) {
+  result <- cf2DistFFT(cf = cf_gamma , x = x, options=options)$cdf
+  return(result)
+}
+
+#Fr2 <-function(x){
+ # result <- cf2DistFFT(cf = cf_gamma, x = x, options=options)$cdf
+  #return(result)
+#}
+
+# onepoint calculation
+#Fwr2 <- function(x){
+  #result <- lapply(X = x, FUN = Fr2)
+  #return(as.numeric(unlist(result)))
+#}
+
+
+# absolute precision - min, max  
+#CDF
+#GP - vec
+Int<-Fwrv(x)
+minimum_Fwrv[i] <- min(abs(cdfVal-Int))
+maximum_Fwrv[i] <- max(abs(cdfVal-Int))
+
+#GP - NOvec
+#minimum_Fwr[i] <- min(abs(cdfVal-Fwr(x)))
+#maximum_Fwr[i] <- max(abs(cdfVal-Fwr(x)))
+
+#FFT - vec
+Int<-Fwrv2(x)
+FFTminimum_Fwrv[i] <- min(abs(cdfVal-Int))
+FFTmaximum_Fwrv[i] <- max(abs(cdfVal-Int))
+
+#FFT - NOvec
+#FFTminimum_Fwr[i] <- min(abs(cdfVal-Fwr2(x)))
+#FFTmaximum_Fwr[i] <- max(abs(cdfVal-Fwr2(x)))
+
+#De - complex
+Int<-Fdecv(x,eps)
+minimum_Fdecv[i] <- min(abs(cdfVal-Int))
+maximum_Fdecv[i] <- max(abs(cdfVal-Int))
+
+#De - real
+Int<-Fdev(x,eps)
+minimum_Fdev[i] <- min(abs(cdfVal-Int))
+maximum_Fdev[i] <- max(abs(cdfVal-Int))
+}
+
+result1<-list("min - cdf vector gp"=mean(minimum_Fwrv),
+             "max - cdf vector gp"=mean(maximum_Fwrv),
+             #"min - cdf novector gp"=mean(minimum_Fwr),
+             #"max - cdf novector gp"=mean(maximum_Fwr),
+             "min - cdf vector fft"=mean(FFTminimum_Fwrv),
+             "max - cdf vector fft"=mean(FFTmaximum_Fwrv),
+             #"min - cdf novector fft"=mean(FFTminimum_Fwr),
+             #"max - cdf novector fft"=mean(maximum_Fwr),
+             "min - cdf complex de - gp"=mean(minimum_Fdecv),
+             "max - cdf complex de - gp"=mean(maximum_Fdecv),
+             "min - cdf nocomplex de - gp"=mean(minimum_Fdev),
+             "max - cdf nocomplex de - gp"=mean(maximum_Fdev))
+
+result2<-list("min - cdf vector gp"=minimum_Fwrv,
+             "max - cdf vector gp"=maximum_Fwrv,
+             #"min - cdf novector gp"=minimum_Fwr,
+             #"max - cdf novector gp"=maximum_Fwr,
+             "min - cdf vector fft"=FFTminimum_Fwrv,
+             "max - cdf vector fft"=FFTmaximum_Fwrv,
+             #"min - cdf novector fft"=FFTminimum_Fwr,
+             #"max - cdf novector fft"=maximum_Fwr,
+             "min - cdf complex de - gp"=minimum_Fdecv,
+             "max - cdf complex de - gp"=maximum_Fdecv,
+             "min - cdf nocomplex de - gp"=minimum_Fdev,
+             "max - cdf nocomplex de - gp"=maximum_Fdev)
+
+result<-list(result1,result2)
+return(result)
+}
+
+```
+
+```{r}
+x <- seq(0.1, 4, length.out = 501)
+```
+
+```{r warning=FALSE}
+result <- simulations(100,x,1e-10,1,10)
+```
+
+```{r}
+#histogramy
+min<-hist(result[[2]]$`min - cdf vector gp`,breaks=20)
+max<-hist(result[[2]]$`max - cdf vector gp`,breaks=20)
+
+#min<-hist(result[[2]]$`min - cdf novector gp`,breaks=20)
+#max<-hist(result[[2]]$`max - cdf novector gp`,breaks=20)
+#plot(max,add=TRUE,col="red",main="CDF-Method: cf2DistGP no-vectorize")
+
+min<-hist(result[[2]]$`min - cdf vector fft`,breaks=20)
+max<-hist(result[[2]]$`max - cdf vector fft`,breaks=20)
+
+#min<-hist(result[[2]]$`min - cdf novector fft`,breaks=20)
+#max<-hist(result[[2]]$`max - cdf novector fft`,breaks=20)
+#plot(max,add=TRUE,col="red",main="CDF-Method: cf2DistFFT no-vectorize")
+
+min<-hist(result[[2]]$`min - cdf complex de - gp`,breaks=20)
+max<-hist(result[[2]]$`max - cdf complex de - gp`,breaks=20)
+
+min<-hist(result[[2]]$`min - cdf nocomplex de - gp`,breaks=20)
+max<-hist(result[[2]]$`max - cdf nocomplex de - gp`,breaks=20)
+```
+
+```{r warning=FALSE}
+result <- simulations(100,x,1e-10,10,100)
+```
+
+```{r}
+min<-hist(result[[2]]$`min - cdf vector gp`,breaks=20)
+max<-hist(result[[2]]$`max - cdf vector gp`,breaks=20)
+
+#min<-hist(result[[2]]$`min - cdf novector gp`,breaks=20)
+#max<-hist(result[[2]]$`max - cdf novector gp`,breaks=20)
+#plot(max,add=TRUE,col="red",main="CDF-Method: cf2DistGP no-vectorize")
+
+min<-hist(result[[2]]$`min - cdf vector fft`,breaks=20)
+max<-hist(result[[2]]$`max - cdf vector fft`,breaks=20)
+
+#min<-hist(result[[2]]$`min - cdf novector fft`,breaks=20)
+#max<-hist(result[[2]]$`max - cdf novector fft`,breaks=20)
+#plot(max,add=TRUE,col="red",main="CDF-Method: cf2DistFFT no-vectorize")
+
+min<-hist(result[[2]]$`min - cdf complex de - gp`,breaks=20)
+max<-hist(result[[2]]$`max - cdf complex de - gp`,breaks=20)
+
+min<-hist(result[[2]]$`min - cdf nocomplex de - gp`,breaks=20)
+max<-hist(result[[2]]$`max - cdf nocomplex de - gp`,breaks=20)
+```
+
+
+```{r warning=FALSE}
+result <- simulations(100,x,1e-10,1,100)
+```
+
+```{r}
+min<-hist(result[[2]]$`min - cdf vector gp`,main='Minimálne odchýlky pre GP',breaks=20,xlab = "Odchýlky")
+max<-hist(result[[2]]$`max - cdf vector gp`,main='Maximálne odchýlky pre GP',breaks=20,xlab = "Odchýlky")
+
+#min<-hist(result[[2]]$`min - cdf novector gp`,breaks=20)
+#max<-hist(result[[2]]$`max - cdf novector gp`,breaks=20)
+#plot(max,add=TRUE,col="red",main="CDF-Method: cf2DistGP no-vectorize")
+
+min<-hist(result[[2]]$`min - cdf vector fft`,main='Minimálne odchýlky pre FFT',breaks=20,xlab = "Odchýlky")
+max<-hist(result[[2]]$`max - cdf vector fft`,main='Maximálne odchýlky pre FFT',breaks=20,xlab = "Odchýlky")
+
+#min<-hist(result[[2]]$`min - cdf novector fft`,breaks=20)
+#max<-hist(result[[2]]$`max - cdf novector fft`,breaks=20)
+#plot(max,add=TRUE,col="red",main="CDF-Method: cf2DistFFT no-vectorize")
+
+min<-hist(result[[2]]$`min - cdf complex de - gp`,main='Minimálne odchýlky pre DE GP komplexná zložka',breaks=20,xlab = "Odchýlky")
+max<-hist(result[[2]]$`max - cdf complex de - gp`,main='Maximálne odchýlky pre DE GP komplexná zložka',breaks=20,xlab = "Odchýlky")
+
+min<-hist(result[[2]]$`min - cdf nocomplex de - gp`,main='Minimálne odchýlky pre DE GP reálna zložka',breaks=20,xlab = "Odchýlky")
+max<-hist(result[[2]]$`max - cdf nocomplex de - gp`,main='Maximálne odchýlky pre DE GP reálna zložka',breaks=20,xlab = "Odchýlky")
+```
+
