@@ -1,5 +1,5 @@
 ---
-title: "Porovnania_cdf_gdd3"
+title: "Porovnania CDF GDD 3"
 author: "Branislav Lacovič"
 date: "2024-04-17"
 output: html_document
@@ -9,6 +9,11 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+Porovnávania algoritmus cf2DistGP s algoritmom cf2DistFFT a s algoritmami, ktoré okrem lichobežníkovej kvadratúry pri výpočte integrálov využívajú aj Dvojitú exponenciálnu kvadratúru.
+
+Metódy sme spúšťali pre tri škály parametrov $[1, 10]$, $[10, 100]$, a $[1, 100]$. Dvojica parametrov bola z týchto rozhraní vybraná náhodne. Pre každé rozhranie bolo vykonaných sto simulácii. Pozorovali sme minimálne a maximálne absolútne odchýlky každej metódy od skutočných hodnôt a tiež aj časy behu algoritmu. Algoritmy sme porovnávali pri výpočte distribučnej funkcie.
+
+Na obrázkoch môžeme vidieť histogramy odchýlok spomenutých metód pre tretie rozhranie $\alpha$ , $\beta$ z intervalu $[1, 50]$.
 ```{r}
 library(distributions3)
 library(CharFunToolR)
