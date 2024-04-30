@@ -1,5 +1,5 @@
 ---
-title: "Porovnania_pdfCasy_gdd"
+title: "Porovnania časov PDF pre GDD"
 author: "Branislav Lacovič"
 date: "2024-02-29"
 output: html_document
@@ -8,7 +8,11 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+Porovnávania  časov algoritmu cf2DistGP s algoritmom cf2DistFFT a s algoritmami, ktoré okrem lichobežníkovej kvadratúry pri výpočte integrálov využívajú aj Dvojitú exponenciálnu kvadratúru.
 
+Metódy sme spúšťali pre škálu parametrov  $[1, 50]$. Dvojica parametrov bola z týchto rozhraní vybraná náhodne. Pre každé rozhranie bolo vykonaných sto simulácii. Pozorovali sme minimálne a maximálne absolútne odchýlky každej metódy od skutočných hodnôt a tiež aj časy behu algoritmu. Algoritmy sme porovnávali pri výpočte hustoty.
+
+Na obrázkoch môžeme vidieť histogramy odchýlok spomenutých metód pre prvé rozhranie $\alpha$ , $\beta$ z intervalu $[1, 50]$.
 ```{r}
 library(CharFunToolR)
 setwd("C:/Users/Lacovic/OneDrive - UPJŠ/LacovicBranislavBpDp/Softver/DE_kvadratura/skuska GDD")
